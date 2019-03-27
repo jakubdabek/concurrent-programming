@@ -9,3 +9,9 @@ install:
 
 build:
 	GOPATH=$(PWD) go build src/main/*.go
+
+format:
+	find -name '*.go' | xargs -t --max-lines=1 go fmt
+
+clean:
+	$(RM) Main

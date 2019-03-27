@@ -1,4 +1,4 @@
-package main
+package corporation
 
 import (
 	"fmt"
@@ -19,9 +19,9 @@ var jobIndexCounter int64 = 0
 
 func newJob(left, right float64, executor JobExecutor) Job {
 	return Job{
-		index: atomic.AddInt64(&productIndexCounter, 1),
-		left: left,
-		right: right,
+		index:    atomic.AddInt64(&productIndexCounter, 1),
+		left:     left,
+		right:    right,
 		executor: executor,
 	}
 }

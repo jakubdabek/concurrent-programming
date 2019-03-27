@@ -1,21 +1,23 @@
 package constants
 
 import (
-	"time"
 	"math/rand"
+	"time"
 )
 
+const LogIntroductionLength = 12
+
 const (
-	NumberOfWorkers = 3
+	NumberOfWorkers  = 3
 	JobQueueCapacity = 5
-	StorageCapacity = 20
-	ClientCapacity = 4
+	StorageCapacity  = 20
+	ClientCapacity   = 4
 )
 
 const (
-	WorkerSleepTimeMin, WorkerSleepTimeMax = 3000, 8000
-	CEOSleepTimeMin, CEOSleepTimeMax = 1500, 3000
-	JobExecutionTimeMin, JobExecutionTimeMax = 3000, 4500
+	WorkerSleepTimeMin, WorkerSleepTimeMax     = 3000, 8000
+	CEOSleepTimeMin, CEOSleepTimeMax           = 1500, 3000
+	JobExecutionTimeMin, JobExecutionTimeMax   = 3000, 4500
 	ClientArrivalTimeMin, ClientArrivalTimeMax = 1200, 10000
 )
 

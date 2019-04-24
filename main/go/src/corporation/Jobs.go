@@ -6,10 +6,10 @@ import (
 )
 
 type Job struct {
-	index       int64
-	left, right float64
-	operationType   OperationType
-	result      *Product
+	index         int64
+	left, right   float64
+	operationType OperationType
+	result        *Product
 }
 
 func (j Job) String() string {
@@ -20,9 +20,9 @@ var jobIndexCounter int64 = 0
 
 func newJob(left, right float64, operationType OperationType) Job {
 	return Job{
-		index:     atomic.AddInt64(&jobIndexCounter, 1),
-		left:      left,
-		right:     right,
+		index:         atomic.AddInt64(&jobIndexCounter, 1),
+		left:          left,
+		right:         right,
 		operationType: operationType,
 	}
 }
@@ -77,7 +77,7 @@ func (Multiplication) String() string {
 	return "\"*\""
 }
 
-var operationTypes = []OperationType {
+var operationTypes = []OperationType{
 	'+',
 	// '-',
 	'*',

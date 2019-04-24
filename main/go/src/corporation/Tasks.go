@@ -4,6 +4,7 @@ import (
 	"constants"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -57,7 +58,7 @@ func (*CEO) Run(logger *Logger, jobQueue *JobQueue) {
 }
 
 type useWorkStationOp struct {
-	job *Job
+	job             *Job
 	responseChannel chan *Job
 }
 
@@ -72,9 +73,9 @@ type WorkStation struct {
 }
 
 func NewWorkStation(index int64, operation Operation) *WorkStation {
-	return &WorkStation {
+	return &WorkStation{
 		index,
-		privateWorkStation {
+		privateWorkStation{
 			operation: operation,
 			waitQueue: make(chan useWorkStationOp),
 		},
@@ -89,7 +90,7 @@ func timeoutChannel(duration *time.Duration) <-chan time.Time {
 }
 
 func (workStation *WorkStation) Use(job *Job, timeout *time.Duration) *Job {
-	op := useWorkStationOp { job, make(chan *Job) }
+	op := useWorkStationOp{job, make(chan *Job)}
 	select {
 	case workStation.waitQueue <- op:
 		return <-op.responseChannel
@@ -119,24 +120,60 @@ func (workStation *WorkStation) Run(logger *Logger) {
 			3,
 			workStation.index,
 			job))
-		op.responseChannel <- job 
+		op.responseChannel <- job
 	}
 }
 
-type Worker struct {
-
+type privateWorker struct {
+	jobsDone      int64
+	jobsDoneMutex sync.Mutex
 }
 
-func (*Worker) Run(index int64, logger *Logger, queue *JobQueue, workStations map[OperationType][]*WorkStation, storage *Storage, stateRequestChannel chan<-int64) {
-	var doneJobs int64 = 0
+type Worker struct {
+	id      int64
+	patient bool
+	privateWorker
+}
+
+func NewWorker(id int64, patient bool) *Worker {
+	return &Worker{
+		id:      id,
+		patient: patient,
+	}
+}
+
+func (worker *Worker) GetId() int64  { return worker.id }
+func (worker *Worker) GetLazy() bool { return worker.patient }
+
+func (worker *Worker) incrementJobsDone() {
+	worker.jobsDoneMutex.Lock()
+	defer worker.jobsDoneMutex.Unlock()
+
+	worker.jobsDone++
+}
+
+func (worker *Worker) GetJobsDone() int64 {
+	worker.jobsDoneMutex.Lock()
+	defer worker.jobsDoneMutex.Unlock()
+
+	return worker.jobsDone
+}
+
+func (worker *Worker) Run(logger *Logger, queue *JobQueue, workStations map[OperationType][]*WorkStation, storage *Storage) {
 	for {
 		time.Sleep(constants.WorkerSleepTime())
 		myJob := queue.Take()
-		logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v", constants.LogIntroductionLength-4, "Worker", 3, index, myJob))
+		logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v", constants.LogIntroductionLength-4, "Worker", 3, worker.id, myJob))
 		appropriateWorkStations := workStations[myJob.operationType]
 		workStation := appropriateWorkStations[rng.Intn(len(appropriateWorkStations))]
-		doneJob := workStation.Use(&myJob, nil)
-		logger.Log(fmt.Sprintf("%*s %*d: job done: %v", constants.LogIntroductionLength-4, "Worker", 3, index, doneJob))
+		var timeout *time.Duration
+		if !worker.patient {
+			var tmp time.Duration = constants.ImpatientWorkerAttentionSpan
+			timeout = &tmp
+		}
+		doneJob := workStation.Use(&myJob, timeout)
+		worker.incrementJobsDone()
+		logger.Log(fmt.Sprintf("%*s %*d: job done: %v", constants.LogIntroductionLength-4, "Worker", 3, worker.id, doneJob))
 		storage.Add(*doneJob.result)
 	}
 }
@@ -193,7 +230,7 @@ func maybeTakeJobOpChannel(predicate bool, ch chan *takeJobOp) chan *takeJobOp {
 	return nil
 }
 
-func (jobQueue *JobQueue) Run(logger *Logger, stateRequestChannel chan<-[]Job) {
+func (jobQueue *JobQueue) Run(logger *Logger, stateRequestChannel chan<- []Job) {
 	for {
 		select {
 		case job := <-maybeJobChannel(len(jobQueue.jobs) < cap(jobQueue.jobs), jobQueue.addChannel):
@@ -259,7 +296,7 @@ func maybeTakeProductOpChannel(predicate bool, ch chan *takeProductOp) chan *tak
 	return nil
 }
 
-func (storage *Storage) Run(logger *Logger, stateRequestChannel chan<-[]Product) {
+func (storage *Storage) Run(logger *Logger, stateRequestChannel chan<- []Product) {
 	for {
 		select {
 		case prod := <-maybeProductChannel(len(storage.products) < cap(storage.products), storage.addChannel):

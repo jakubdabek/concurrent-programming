@@ -24,6 +24,7 @@ func (*Client) Run(index int64, logger *Logger, storage *Storage, doneChannel <-
 type UserInteractor struct {
 	jobQueueStateRequestChannel chan []Job
 	storageStateRequestChannel  chan []Product
+	workers                     []*Worker
 }
 
 func (userInteractor *UserInteractor) Run() {
@@ -41,6 +42,18 @@ func (userInteractor *UserInteractor) Run() {
 			jobs := <-userInteractor.jobQueueStateRequestChannel
 			products := <-userInteractor.storageStateRequestChannel
 			fmt.Printf("Job queue: %v\nStorage: %v\n", jobs, products)
+			sep := ""
+			for _, v := range userInteractor.workers {
+				var l string
+				if v.GetLazy() {
+					l = "patient"
+				} else {
+					l = "not patient"
+				}
+				fmt.Printf("%sWorker[%d]{%s, %d job(s) done}", sep, v.GetId(), l, v.GetJobsDone())
+				sep = ", "
+			}
+			fmt.Println()
 		}
 		fmt.Println("Enter 's' for status")
 	}
@@ -69,14 +82,19 @@ func main() {
 
 	ceo := CEO{}
 	workers := make([]*Worker, constants.NumberOfWorkers)
+	userInteractor.workers = workers
 	for i := range workers {
-		workers[i] = &Worker{}
+		patient := false
+		if rng.Float32() < constants.PatientWorkerBirthRate {
+			patient = true
+		}
+		workers[i] = NewWorker(int64(i), patient)
 	}
 	logger.Log("Starting CEO, job queue, and storage")
 	go ceo.Run(logger, jobQueue)
 	go jobQueue.Run(logger, userInteractor.jobQueueStateRequestChannel)
 	go storage.Run(logger, userInteractor.storageStateRequestChannel)
-	
+
 	machines := make(map[OperationType][]*WorkStation)
 	const numWS = constants.NumberOfWorkStations
 	additionMachines := make([]*WorkStation, 0, numWS)
@@ -84,10 +102,10 @@ func main() {
 		additionMachines = append(additionMachines, NewWorkStation(int64(i), Addition{}))
 	}
 	machines['+'] = additionMachines
-	
+
 	multiplicationMachines := make([]*WorkStation, 0, numWS)
 	for i := 0; i < numWS; i++ {
-		multiplicationMachines = append(multiplicationMachines, NewWorkStation(int64(i + numWS), Multiplication{}))
+		multiplicationMachines = append(multiplicationMachines, NewWorkStation(int64(i+numWS), Multiplication{}))
 	}
 	machines['*'] = multiplicationMachines
 
@@ -97,10 +115,10 @@ func main() {
 			go station.Run(logger)
 		}
 	}
-	
+
 	logger.Log("Starting workers")
-	for i, worker := range workers {
-		go worker.Run(int64(i), logger, jobQueue, machines, storage)
+	for _, worker := range workers {
+		go worker.Run(logger, jobQueue, machines, storage)
 	}
 
 	doneChannel := make(chan bool, constants.ClientCapacity)

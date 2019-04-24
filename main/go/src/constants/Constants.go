@@ -12,6 +12,7 @@ const (
 	JobQueueCapacity = 5
 	StorageCapacity  = 20
 	ClientCapacity   = 4
+	NumberOfWorkStations = 3
 )
 
 const (

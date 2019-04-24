@@ -45,28 +45,99 @@ func (*CEO) Run(logger *Logger, jobQueue *JobQueue) {
 	logger.Log("CEO: running")
 	for {
 		time.Sleep(constants.JobCreationTime())
-		exec := jobExecutorConstructors[rng.Intn(len(jobExecutorConstructors))]()
+		operationType := operationTypes[rng.Intn(len(operationTypes))]
 		job := newJob(
 			rng.Float64()*1000,
 			rng.Float64()*1000,
-			exec,
+			operationType,
 		)
 		logger.Log(fmt.Sprintf("%*s: thought of a new job: %v", constants.LogIntroductionLength, "CEO", job))
 		jobQueue.Add(job)
 	}
 }
 
-type Worker struct{}
+type useWorkStationOp struct {
+	job *Job
+	responseChannel chan *Job
+}
 
-func (*Worker) Run(index int64, logger *Logger, queue *JobQueue, storage *Storage) {
+type privateWorkStation struct {
+	operation Operation
+	waitQueue chan useWorkStationOp
+}
+
+type WorkStation struct {
+	index int64
+	privateWorkStation
+}
+
+func NewWorkStation(index int64, operation Operation) *WorkStation {
+	return &WorkStation {
+		index,
+		privateWorkStation {
+			operation: operation,
+			waitQueue: make(chan useWorkStationOp),
+		},
+	}
+}
+
+func timeoutChannel(duration *time.Duration) <-chan time.Time {
+	if duration != nil {
+		return time.After(*duration)
+	}
+	return nil
+}
+
+func (workStation *WorkStation) Use(job *Job, timeout *time.Duration) *Job {
+	op := useWorkStationOp { job, make(chan *Job) }
+	select {
+	case workStation.waitQueue <- op:
+		return <-op.responseChannel
+	case <-timeoutChannel(timeout):
+		return nil
+	}
+}
+
+func (workStation *WorkStation) Run(logger *Logger) {
+	for op := range workStation.waitQueue {
+		job := op.job
+		if job.operationType != workStation.operation.getType() {
+			panic("incorrect job given to station")
+		}
+		logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v",
+			constants.LogIntroductionLength-4,
+			"Station",
+			3,
+			workStation.index,
+			job))
+		time.Sleep(constants.JobExecutionTime())
+		product := workStation.operation.perform(job.left, job.right)
+		job.result = &product
+		logger.Log(fmt.Sprintf("%*s %*d: job done: %v",
+			constants.LogIntroductionLength-4,
+			"Station",
+			3,
+			workStation.index,
+			job))
+		op.responseChannel <- job 
+	}
+}
+
+type Worker struct {
+
+}
+
+func (*Worker) Run(index int64, logger *Logger, queue *JobQueue, workStations map[OperationType][]*WorkStation, storage *Storage, stateRequestChannel chan<-int64) {
+	var doneJobs int64 = 0
 	for {
 		time.Sleep(constants.WorkerSleepTime())
 		myJob := queue.Take()
 		logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v", constants.LogIntroductionLength-4, "Worker", 3, index, myJob))
-		time.Sleep(constants.JobExecutionTime())
-		product := myJob.executor.execute(myJob.left, myJob.right)
-		logger.Log(fmt.Sprintf("%*s %*d: job done: %v", constants.LogIntroductionLength-4, "Worker", 3, index, myJob))
-		storage.Add(product)
+		appropriateWorkStations := workStations[myJob.operationType]
+		workStation := appropriateWorkStations[rng.Intn(len(appropriateWorkStations))]
+		doneJob := workStation.Use(&myJob, nil)
+		logger.Log(fmt.Sprintf("%*s %*d: job done: %v", constants.LogIntroductionLength-4, "Worker", 3, index, doneJob))
+		storage.Add(*doneJob.result)
 	}
 }
 
@@ -114,6 +185,7 @@ func maybeJobChannel(predicate bool, ch chan Job) chan Job {
 	}
 	return nil
 }
+
 func maybeTakeJobOpChannel(predicate bool, ch chan *takeJobOp) chan *takeJobOp {
 	if predicate {
 		return ch
@@ -121,7 +193,7 @@ func maybeTakeJobOpChannel(predicate bool, ch chan *takeJobOp) chan *takeJobOp {
 	return nil
 }
 
-func (jobQueue *JobQueue) Run(logger *Logger, stateRequestChannel chan []Job) {
+func (jobQueue *JobQueue) Run(logger *Logger, stateRequestChannel chan<-[]Job) {
 	for {
 		select {
 		case job := <-maybeJobChannel(len(jobQueue.jobs) < cap(jobQueue.jobs), jobQueue.addChannel):
@@ -131,7 +203,6 @@ func (jobQueue *JobQueue) Run(logger *Logger, stateRequestChannel chan []Job) {
 			op.responseChannel <- jobQueue.jobs[0]
 			popJob(&jobQueue.jobs)
 		case stateRequestChannel <- jobQueue.jobs:
-			<-stateRequestChannel
 		}
 	}
 }
@@ -180,6 +251,7 @@ func maybeProductChannel(predicate bool, ch chan Product) chan Product {
 	}
 	return nil
 }
+
 func maybeTakeProductOpChannel(predicate bool, ch chan *takeProductOp) chan *takeProductOp {
 	if predicate {
 		return ch
@@ -187,7 +259,7 @@ func maybeTakeProductOpChannel(predicate bool, ch chan *takeProductOp) chan *tak
 	return nil
 }
 
-func (storage *Storage) Run(logger *Logger, stateRequestChannel chan []Product) {
+func (storage *Storage) Run(logger *Logger, stateRequestChannel chan<-[]Product) {
 	for {
 		select {
 		case prod := <-maybeProductChannel(len(storage.products) < cap(storage.products), storage.addChannel):
@@ -198,7 +270,6 @@ func (storage *Storage) Run(logger *Logger, stateRequestChannel chan []Product) 
 			op.responseChannel <- storage.products[index]
 			deleteProduct(&storage.products, index)
 		case stateRequestChannel <- storage.products:
-			<-stateRequestChannel
 		}
 
 	}

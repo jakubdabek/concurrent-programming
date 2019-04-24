@@ -41,10 +41,6 @@ func (userInteractor *UserInteractor) Run() {
 			jobs := <-userInteractor.jobQueueStateRequestChannel
 			products := <-userInteractor.storageStateRequestChannel
 			fmt.Printf("Job queue: %v\nStorage: %v\n", jobs, products)
-			fmt.Println("Simulation (mostly) paused, press enter to continue")
-			scanner.Scan()
-			userInteractor.jobQueueStateRequestChannel <- nil
-			userInteractor.storageStateRequestChannel <- nil
 		}
 		fmt.Println("Enter 's' for status")
 	}
@@ -80,9 +76,31 @@ func main() {
 	go ceo.Run(logger, jobQueue)
 	go jobQueue.Run(logger, userInteractor.jobQueueStateRequestChannel)
 	go storage.Run(logger, userInteractor.storageStateRequestChannel)
+	
+	machines := make(map[OperationType][]*WorkStation)
+	const numWS = constants.NumberOfWorkStations
+	additionMachines := make([]*WorkStation, 0, numWS)
+	for i := 0; i < numWS; i++ {
+		additionMachines = append(additionMachines, NewWorkStation(int64(i), Addition{}))
+	}
+	machines['+'] = additionMachines
+	
+	multiplicationMachines := make([]*WorkStation, 0, numWS)
+	for i := 0; i < numWS; i++ {
+		multiplicationMachines = append(multiplicationMachines, NewWorkStation(int64(i + numWS), Multiplication{}))
+	}
+	machines['*'] = multiplicationMachines
+
+	logger.Log("Starting machines")
+	for _, v := range machines {
+		for _, station := range v {
+			go station.Run(logger)
+		}
+	}
+	
 	logger.Log("Starting workers")
 	for i, worker := range workers {
-		go worker.Run(int64(i), logger, jobQueue, storage)
+		go worker.Run(int64(i), logger, jobQueue, machines, storage)
 	}
 
 	doneChannel := make(chan bool, constants.ClientCapacity)

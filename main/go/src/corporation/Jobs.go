@@ -8,21 +8,22 @@ import (
 type Job struct {
 	index       int64
 	left, right float64
-	executor    JobExecutor
+	operationType   OperationType
+	result      *Product
 }
 
 func (j Job) String() string {
-	return fmt.Sprintf("Job[%d]{%f %v %f}", j.index, j.left, j.executor, j.right)
+	return fmt.Sprintf("Job[%d]{%f %c %f = %v}", j.index, j.left, j.operationType, j.right, j.result)
 }
 
 var jobIndexCounter int64 = 0
 
-func newJob(left, right float64, executor JobExecutor) Job {
+func newJob(left, right float64, operationType OperationType) Job {
 	return Job{
-		index:    atomic.AddInt64(&productIndexCounter, 1),
-		left:     left,
-		right:    right,
-		executor: executor,
+		index:     atomic.AddInt64(&jobIndexCounter, 1),
+		left:      left,
+		right:     right,
+		operationType: operationType,
 	}
 }
 
@@ -33,13 +34,18 @@ type Product struct {
 	value float64
 }
 
-type JobExecutor interface {
-	execute(left, right float64) Product
+type OperationType rune
+
+type Operation interface {
+	getType() OperationType
+	perform(left, right float64) Product
 }
 
 type Addition struct{}
 
-func (Addition) execute(left, right float64) Product {
+func (Addition) getType() OperationType { return '+' }
+
+func (Addition) perform(left, right float64) Product {
 	return Product{atomic.AddInt64(&productIndexCounter, 1), left + right}
 }
 
@@ -49,7 +55,9 @@ func (Addition) String() string {
 
 type Subtraction struct{}
 
-func (Subtraction) execute(left, right float64) Product {
+func (Subtraction) getType() OperationType { return '-' }
+
+func (Subtraction) perform(left, right float64) Product {
 	return Product{atomic.AddInt64(&productIndexCounter, 1), left - right}
 }
 
@@ -59,7 +67,9 @@ func (Subtraction) String() string {
 
 type Multiplication struct{}
 
-func (Multiplication) execute(left, right float64) Product {
+func (Multiplication) getType() OperationType { return '*' }
+
+func (Multiplication) perform(left, right float64) Product {
 	return Product{atomic.AddInt64(&productIndexCounter, 1), left * right}
 }
 
@@ -67,8 +77,14 @@ func (Multiplication) String() string {
 	return "\"*\""
 }
 
-var jobExecutorConstructors = []func() JobExecutor{
-	func() JobExecutor { return Addition{} },
-	func() JobExecutor { return Subtraction{} },
-	func() JobExecutor { return Multiplication{} },
+var operationTypes = []OperationType {
+	'+',
+	// '-',
+	'*',
+}
+
+var jobExecutorConstructors = []func() Operation{
+	func() Operation { return Addition{} },
+	func() Operation { return Subtraction{} },
+	func() Operation { return Multiplication{} },
 }

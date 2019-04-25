@@ -13,8 +13,10 @@ procedure Main is
    Storage : Corporation.ProductStorage_Task_Access := new Jobs.ProductStorage_Task(Max_Size => 10);
 
    CEO : Corporation.CEO_Task;
-   type WorkerArray is array(1..My_Constants.NumberOfWorkers) of Corporation.Worker_Task;
-   Workers : WorkerArray;
+
+   Workers : Corporation.WorkerArray_Ptr := new Corporation.WorkerArray;
+
+   Work_Stations : Corporation.Work_Station_Types_Ptr := new Corporation.Work_Station_Types;
 
    Verbose : Boolean := False;
    type UIA is access all Logging.UserInteractor;
@@ -46,13 +48,31 @@ begin
    Logging.L.Start(Verbose);
    if not Verbose then
       UserInteractor := new Logging.UserInteractor;
-      UserInteractor.Start(Queue, Storage);
+      UserInteractor.Start(Queue, Storage, Workers);
    end if;
 
    CEO.Start(Corporation.JobQueue_Task_Access(Queue));
-   for W in Workers'Range loop
-      Workers(W).Start(Natural(W), Queue, Storage);
-   end loop;
+   declare
+      C : Natural := 1;
+   begin
+      for T in Work_Stations'Range loop
+         for W in Work_Stations(T)'Range loop
+            Work_Stations(T)(W) := new Corporation.Work_Station(C, T, Jobs.NewOperation(T));
+            C := C + 1;
+         end loop;
+      end loop;
+   end;
+
+   declare
+      package R renames Ada.Numerics.Float_Random;
+      G : R.Generator;
+   begin
+      R.Reset(G);
+      for W in Workers'Range loop
+         Workers(W) := new Corporation.WorkerT(Natural(W), R.Random(G) < My_Constants.PatientWorkerBirthRate);
+         Workers(W).Start(Queue, Work_Stations, Storage);
+      end loop;
+   end;
 
    Spawn_Clients;
 

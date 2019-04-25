@@ -11,7 +11,8 @@ package Logging is
    
    task type UserInteractor is
       entry Start(JobQueueIn : in Corporation.JobQueue_Task_Access;
-                  ProductStorageIn : in Corporation.ProductStorage_Task_Access);
+                  ProductStorageIn : in Corporation.ProductStorage_Task_Access;
+                  WorkersIn : in Corporation.WorkerArray_Ptr);
    end UserInteractor;
    
 end Logging;

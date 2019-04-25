@@ -1,5 +1,10 @@
 package body My_Constants is
    
+   function Get_Worker_Patience (Generator : Rand.Generator) return Boolean is
+   begin
+      return Rand.Random(Generator) > PatientWorkerBirthRate;
+   end;
+   
    function Get_Worker_Sleep_Time (Generator : Rand.Generator) return Duration is
    begin
       return Duration(WorkerSleepTimeMin + (WorkerSleepTimeMax - WorkerSleepTimeMin) * Rand.Random(Generator));

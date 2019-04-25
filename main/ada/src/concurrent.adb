@@ -6,7 +6,16 @@ package body Concurrent is
          Value := N;
          N := N + 1;
       end Increment;
-            
+      
+      procedure Increment is
+      begin
+         N := N + 1;
+      end Increment;
+      
+      function Get_Value return Natural is
+      begin
+         return N;
+      end Get_Value;
    end Counter;
    
    protected body Semaphore is

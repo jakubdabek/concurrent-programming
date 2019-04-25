@@ -13,11 +13,11 @@ package body Jobs is
    end Product_Image;
 
 
-   function NewProduct(Value : ValueType) return ProductT is
+   function NewProduct(Value : ValueType) return Product_Ptr is
       Cnt : Natural;
    begin
       ProductIndexCounter.Increment(Cnt);
-      return (IndexType(Cnt), Value);
+      return new ProductT'(IndexType(Cnt), Value);
    end;
 
    function Execute(This : in out Addition; Left : in ValueType; Right : in ValueType)
@@ -25,10 +25,10 @@ package body Jobs is
    begin
       return Left + Right;
    end Execute;
-   function Executor_Image(This : in Addition) return String is
+   function Operator_Image(This : in Addition) return String is
    begin
       return "'+'";
-   end Executor_Image;
+   end Operator_Image;
 
 
    function Execute(This : in out Subtraction; Left : in ValueType; Right : in ValueType)
@@ -36,10 +36,10 @@ package body Jobs is
    begin
       return Left - Right;
    end Execute;
-   function Executor_Image(This : in Subtraction) return String is
+   function Operator_Image(This : in Subtraction) return String is
    begin
       return "'-'";
-   end Executor_Image;
+   end Operator_Image;
 
 
    function Execute(This : in out Multiplication; Left : in ValueType; Right : in ValueType)
@@ -47,27 +47,44 @@ package body Jobs is
    begin
       return Left * Right;
    end Execute;
-   function Executor_Image(This : in Multiplication) return String is
+   function Operator_Image(This : in Multiplication) return String is
    begin
       return "'*'";
-   end Executor_Image;
+   end Operator_Image;
 
 
-   function NewExecutor(S : Ada.Numerics.Float_Random.Generator) return JobExecutor_Ptr is
+   function NewOperation(S : OperationT) return Operation_Ptr is
+   begin
+      case S is
+         when '+' => return new Addition;
+         when '*' => return new Multiplication;
+         when others => Put_Line("Fuck"); return null;
+      end case;
+   end NewOperation;
+
+
+   function NewOperationType(S : Ada.Numerics.Float_Random.Generator) return OperationT is
       C : Float := Ada.Numerics.Float_Random.Random(S);
    begin
-      if C < 1.0/3.0 then
-         return new Addition;
-      elsif C < 2.0/3.0 then
-         return new Subtraction;
+      if C < 1.0/2.0 then
+         return '+';
       else
-         return new Multiplication;
+         return '*';
       end if;
-   end NewExecutor;
+   end NewOperationType;
+
+   JobIndexCounter : Concurrent.Counter;
+
+   function NewJob(Left : ValueType; Right : ValueType; OperationType : OperationT) return JobT is
+      Index : Natural;
+   begin
+      JobIndexCounter.Increment(Index);
+      return (Index, Left, Right, OperationType, null);
+   end NewJob;
 
    function Job_Image(Job : in JobT) return String is
    begin
-      return "Job{" & Job.Left'Image & Job.Executor.Executor_Image & Job.Right'Image & " }";
+      return "Job[" & Job.Index'Image & " ]{" & Job.Left'Image & Job.OperationType'Image & Job.Right'Image & " }";
    end Job_Image;
 
 

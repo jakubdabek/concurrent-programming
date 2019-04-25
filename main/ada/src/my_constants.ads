@@ -8,7 +8,12 @@ package My_Constants is
    JobQueueCapacity : constant := 5;
    StorageCapacity : constant := 20;
    ClientCapacity : constant := 2;
-
+   NumberOfWorkStations : constant := 1;
+   
+   PatientWorkerBirthRate : constant := 0.9;
+   function Get_Worker_Patience (Generator : Rand.Generator) return Boolean;
+   
+   ImpatientWorkerAttentionSpan : constant := 0.2;
 
    WorkerSleepTimeMin : constant := 3.0;
    WorkerSleepTimeMax : constant := 8.0;

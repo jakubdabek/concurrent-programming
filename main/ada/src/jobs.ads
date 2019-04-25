@@ -7,7 +7,7 @@ with Concurrent;
 
 
 package Jobs is
-   type IndexType is new Positive;
+   type IndexType is new Natural;
    type ValueType is new Float;
    
    type ProductT is record
@@ -15,44 +15,53 @@ package Jobs is
       Value : ValueType;
    end record;
    
+   type Product_Ptr is access all ProductT;
+   
    function Product_Image(Product : in ProductT) return String;
    
-   function NewProduct(Value : ValueType) return ProductT;
+   function NewProduct(Value : ValueType) return Product_Ptr;
    ProductIndexCounter : Concurrent.Counter;
+   
+   type OperationT is ('+', '*');
 
-   type JobExecutor is interface;
+   type Operation is interface;
 
-   function Execute(This : in out JobExecutor; Left : in ValueType; Right : in ValueType)
+   function Execute(This : in out Operation; Left : in ValueType; Right : in ValueType)
                     return ValueType is abstract;
-   function Executor_Image(This : in JobExecutor) return String is abstract;
+   function Operator_Image(This : in Operation) return String is abstract;
 
-   type JobExecutor_Ptr is access JobExecutor'Class;
+   type Operation_Ptr is access Operation'Class;
 
-   type Addition is new JobExecutor with null record;
+   type Addition is new Operation with null record;
    function Execute(This : in out Addition; Left : in ValueType; Right : in ValueType)
                     return ValueType;
-   function Executor_Image(This : in Addition) return String;
+   function Operator_Image(This : in Addition) return String;
    
     
-   type Subtraction is new JobExecutor with null record;
+   type Subtraction is new Operation with null record;
    function Execute(This : in out Subtraction; Left : in ValueType; Right : in ValueType)
                     return ValueType;
-   function Executor_Image(This : in Subtraction) return String;
+   function Operator_Image(This : in Subtraction) return String;
    
 
-   type Multiplication is new JobExecutor with null record;
+   type Multiplication is new Operation with null record;
    function Execute(This : in out Multiplication; Left : in ValueType; Right : in ValueType)
                     return ValueType;
-   function Executor_Image(This : in Multiplication) return String;
+   function Operator_Image(This : in Multiplication) return String;
    
    
-   function NewExecutor(S :Ada.Numerics.Float_Random.Generator) return JobExecutor_Ptr;
+   function NewOperation(S : OperationT) return Operation_Ptr;
+   function NewOperationType(S : Ada.Numerics.Float_Random.Generator) return OperationT;
     
    type JobT is record
+      Index : Natural;
       Left : ValueType;
       Right : ValueType;
-      Executor : JobExecutor_Ptr;
+      OperationType : OperationT;
+      Product : Product_Ptr := null;
    end record;
+   
+   function NewJob(Left : ValueType; Right : ValueType; OperationType : OperationT) return JobT;
    
    function Job_Image(Job : in JobT) return String;
    

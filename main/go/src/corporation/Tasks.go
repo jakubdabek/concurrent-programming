@@ -165,13 +165,20 @@ func (worker *Worker) Run(logger *Logger, queue *JobQueue, workStations map[Oper
 		myJob := queue.Take()
 		logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v", constants.LogIntroductionLength-4, "Worker", 3, worker.id, myJob))
 		appropriateWorkStations := workStations[myJob.operationType]
-		workStation := appropriateWorkStations[rng.Intn(len(appropriateWorkStations))]
-		var timeout *time.Duration
-		if !worker.patient {
-			var tmp time.Duration = constants.ImpatientWorkerAttentionSpan
-			timeout = &tmp
+		var doneJob *Job
+		for {
+			workStation := appropriateWorkStations[rng.Intn(len(appropriateWorkStations))]
+			var timeout *time.Duration
+			if !worker.patient {
+				var tmp time.Duration = constants.ImpatientWorkerAttentionSpan
+				timeout = &tmp
+			}
+			logger.Log(fmt.Sprintf("%*s %*d: waiting to use station: %d", constants.LogIntroductionLength-4, "Worker", 3, worker.id, workStation.index))
+			doneJob = workStation.Use(&myJob, timeout)
+			if doneJob != nil {
+				break
+			}
 		}
-		doneJob := workStation.Use(&myJob, timeout)
 		worker.incrementJobsDone()
 		logger.Log(fmt.Sprintf("%*s %*d: job done: %v", constants.LogIntroductionLength-4, "Worker", 3, worker.id, doneJob))
 		storage.Add(*doneJob.result)

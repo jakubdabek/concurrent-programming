@@ -116,9 +116,13 @@ func main() {
 		}
 	}
 
+	logger.Log("Starting service")
+	service := NewRepairService(constants.NumberOfRepairWorkers, machines)
+	go service.Run(logger)
+
 	logger.Log("Starting workers")
 	for _, worker := range workers {
-		go worker.Run(logger, jobQueue, machines, storage)
+		go worker.Run(logger, jobQueue, machines, storage, service)
 	}
 
 	doneChannel := make(chan bool, constants.ClientCapacity)

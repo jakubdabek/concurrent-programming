@@ -63,8 +63,9 @@ type useWorkStationOp struct {
 }
 
 type privateWorkStation struct {
-	operation Operation
-	waitQueue chan useWorkStationOp
+	operation     Operation
+	waitQueue     chan useWorkStationOp
+	repairChannel chan bool
 }
 
 type WorkStation struct {
@@ -76,8 +77,9 @@ func NewWorkStation(index int64, operation Operation) *WorkStation {
 	return &WorkStation{
 		index,
 		privateWorkStation{
-			operation: operation,
-			waitQueue: make(chan useWorkStationOp),
+			operation:     operation,
+			waitQueue:     make(chan useWorkStationOp),
+			repairChannel: make(chan bool),
 		},
 	}
 }
@@ -89,13 +91,13 @@ func timeoutChannel(duration *time.Duration) <-chan time.Time {
 	return nil
 }
 
-func (workStation *WorkStation) Use(job *Job, timeout *time.Duration) *Job {
+func (workStation *WorkStation) Use(job *Job, timeout *time.Duration) (*Job, bool) {
 	op := useWorkStationOp{job, make(chan *Job)}
 	select {
 	case workStation.waitQueue <- op:
-		return <-op.responseChannel
+		return <-op.responseChannel, false
 	case <-timeoutChannel(timeout):
-		return nil
+		return nil, true
 	}
 }
 
@@ -121,6 +123,156 @@ func (workStation *WorkStation) Run(logger *Logger) {
 			workStation.index,
 			job))
 		op.responseChannel <- job
+
+		if rng.Float64() < constants.WorkStationBreakChance {
+			logger.Log(fmt.Sprintf("%*s %*d: malfunction",
+				constants.LogIntroductionLength-4,
+				"Station",
+				3,
+				workStation.index))
+
+			for {
+				select {
+				case op := <-workStation.waitQueue:
+					logger.Log(fmt.Sprintf("%*s %*d: got new job to do: %v, but there was a malfunction",
+						constants.LogIntroductionLength-4,
+						"Station",
+						3,
+						workStation.index,
+						op.job))
+					op.responseChannel <- nil
+				case <-workStation.repairChannel:
+					logger.Log(fmt.Sprintf("%*s %*d: repaired",
+						constants.LogIntroductionLength-4,
+						"Station",
+						3,
+						workStation.index))
+					goto AfterMalfunction
+				}
+			}
+		AfterMalfunction:
+		}
+	}
+}
+
+type serviceWorker struct {
+	id   int64
+	busy bool
+}
+
+type completionReport struct {
+	malfunction *malfunctionReport
+	worker      *serviceWorker
+}
+
+func (worker *serviceWorker) repair(logger *Logger, report *malfunctionReport, machine *WorkStation, completionChannel chan completionReport) {
+	time.Sleep(constants.RepairWorkerTravelTime())
+	logger.Log(fmt.Sprintf("%*s %*d: repairing: %v", constants.LogIntroductionLength-4, "Repairman", 3, worker.id, report))
+	select {
+	case machine.repairChannel <- true:
+		logger.Log(fmt.Sprintf("%*s %*d: repair done: %v", constants.LogIntroductionLength-4, "Repairman", 3, worker.id, report))
+		completionChannel <- completionReport{report, worker}
+	case <-time.After(1000):
+		logger.Log(fmt.Sprintf("%*s %*d: repair infeasible: %v", constants.LogIntroductionLength-4, "Repairman", 3, worker.id, report))
+		completionChannel <- completionReport{nil, worker}
+	}
+}
+
+type malfunctionReport struct {
+	operationType OperationType
+	index         int64
+}
+
+func (rep malfunctionReport) String() string {
+	return fmt.Sprintf("{%c %d}", rep.operationType, rep.index)
+}
+
+type workStationStatus struct {
+	working     bool
+	serviceSent bool
+}
+
+type privateRepairService struct {
+	serviceWorkers      []*serviceWorker
+	workStations        map[OperationType][]*WorkStation
+	workStationStatuses map[OperationType][]workStationStatus
+	pendingReports      chan malfunctionReport
+}
+
+type RepairService struct {
+	privateRepairService
+}
+
+func NewRepairService(numberOfWorkers int64, machines map[OperationType][]*WorkStation) *RepairService {
+	statuses := make(map[OperationType][]workStationStatus, len(machines))
+	for k, v := range machines {
+		statuses[k] = make([]workStationStatus, len(v))
+		for i := range statuses[k] {
+			statuses[k][i].working = true
+			statuses[k][i].serviceSent = false
+		}
+	}
+	serviceWorkers := make([]*serviceWorker, numberOfWorkers)
+	for i := range serviceWorkers {
+		serviceWorkers[i] = &serviceWorker{int64(i), false}
+	}
+	return &RepairService{
+		privateRepairService{
+			serviceWorkers:      serviceWorkers,
+			workStations:        machines,
+			workStationStatuses: statuses,
+			pendingReports:      make(chan malfunctionReport, 10),
+		},
+	}
+}
+
+func (service *RepairService) ReportMalfunction(operationType OperationType, index int64) {
+	service.pendingReports <- malfunctionReport{operationType, index}
+}
+
+func (service *RepairService) sendWorker(logger *Logger, operationType OperationType, index int64, completionChannel chan completionReport) bool {
+	for _, w := range service.serviceWorkers {
+		if !w.busy {
+			w.busy = true
+			go w.repair(logger, &malfunctionReport{operationType, index}, service.workStations[operationType][index], completionChannel)
+			return true
+		}
+	}
+
+	return false
+}
+
+func (service *RepairService) Run(logger *Logger) {
+	completionChannel := make(chan completionReport)
+	for {
+		select {
+		case newReport := <-service.pendingReports:
+			logger.Log(fmt.Sprintf("%*s: new report: %v", constants.LogIntroductionLength, "Service", newReport))
+			service.workStationStatuses[newReport.operationType][newReport.index].working = false
+		case completedReport := <-completionChannel:
+			completedReport.worker.busy = false
+			malRep := completedReport.malfunction
+			if malRep != nil {
+				service.workStationStatuses[malRep.operationType][malRep.index].working = true
+				service.workStationStatuses[malRep.operationType][malRep.index].serviceSent = false
+				logger.Log(fmt.Sprintf("%*s: station repaired: %v", constants.LogIntroductionLength, "Service", malRep))
+			}
+		}
+
+		for k, singleTypeStatuses := range service.workStationStatuses {
+			for i := range singleTypeStatuses {
+				if !singleTypeStatuses[i].working && !singleTypeStatuses[i].serviceSent {
+					if service.sendWorker(logger, k, int64(i), completionChannel) {
+						logger.Log(fmt.Sprintf("%*s: sent worker to : %c %d", constants.LogIntroductionLength, "Service", k, i))
+						singleTypeStatuses[i].serviceSent = true
+					} else {
+						logger.Log(fmt.Sprintf("%*s: no free workers : %c %d", constants.LogIntroductionLength, "Service", k, i))
+						goto NoFreeWorkers
+					}
+				}
+			}
+		}
+	NoFreeWorkers:
 	}
 }
 
@@ -159,7 +311,7 @@ func (worker *Worker) GetJobsDone() int64 {
 	return worker.jobsDone
 }
 
-func (worker *Worker) Run(logger *Logger, queue *JobQueue, workStations map[OperationType][]*WorkStation, storage *Storage) {
+func (worker *Worker) Run(logger *Logger, queue *JobQueue, workStations map[OperationType][]*WorkStation, storage *Storage, service *RepairService) {
 	for {
 		time.Sleep(constants.WorkerSleepTime())
 		myJob := queue.Take()
@@ -167,16 +319,22 @@ func (worker *Worker) Run(logger *Logger, queue *JobQueue, workStations map[Oper
 		appropriateWorkStations := workStations[myJob.operationType]
 		var doneJob *Job
 		for {
-			workStation := appropriateWorkStations[rng.Intn(len(appropriateWorkStations))]
+			index := rng.Intn(len(appropriateWorkStations))
+			workStation := appropriateWorkStations[index]
 			var timeout *time.Duration
 			if !worker.patient {
 				var tmp time.Duration = constants.ImpatientWorkerAttentionSpan
 				timeout = &tmp
 			}
 			logger.Log(fmt.Sprintf("%*s %*d: waiting to use station: %d", constants.LogIntroductionLength-4, "Worker", 3, worker.id, workStation.index))
-			doneJob = workStation.Use(&myJob, timeout)
+			var timedOut bool
+			doneJob, timedOut = workStation.Use(&myJob, timeout)
 			if doneJob != nil {
 				break
+			}
+			if !timedOut {
+				service.ReportMalfunction(myJob.operationType, int64(index))
+				time.Sleep(constants.WorkerSleepTime())
 			}
 		}
 		worker.incrementJobsDone()

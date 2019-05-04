@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 )
 
+type OperationType rune
+
 type Job struct {
 	index         int64
 	left, right   float64
@@ -33,8 +35,6 @@ type Product struct {
 	index int64
 	value float64
 }
-
-type OperationType rune
 
 type Operation interface {
 	getType() OperationType

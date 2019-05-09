@@ -44,9 +44,33 @@ package body Logging is
             if S(1..Last) = "p" then
                ProductStorage.Status(Product_Vector);
                Put_Line("Number of products in storage:" & Product_Vector.Length'Image);
+               declare
+                  C : Jobs.ProductStorage_Vector.Cursor;
+                  use type Jobs.ProductStorage_Vector.Cursor;
+               begin
+                  C := Product_Vector.First;
+                  loop
+                     exit when C = Jobs.ProductStorage_Vector.No_Element;
+                     Put(Jobs.Product_Image(Jobs.ProductStorage_Vector.Element(C)) & ", ");
+                     C := Jobs.ProductStorage_Vector.Next(C);
+                  end loop;
+                  Put_Line("");
+               end;
             elsif S(1..Last) = "q" then
                JobQueue.Status(Job_List);
                Put_Line("Number of jobs in queue:" & Job_List.Length'Image);
+               declare
+                  C : Jobs.JobQueue_LinkedList.Cursor;
+                  use type Jobs.JobQueue_LinkedList.Cursor;
+               begin
+                  C := Job_List.First;
+                  loop
+                     exit when C = Jobs.JobQueue_LinkedList.No_Element;
+                     Put(Jobs.Job_Image(Jobs.JobQueue_LinkedList.Element(C)) & ", ");
+                     C := Jobs.JobQueue_LinkedList.Next(C);
+                  end loop;
+                  Put_Line("");
+               end;
             elsif S(1..Last) = "w" then
                for W in Workers'Range loop
                   Worker := Workers(W);

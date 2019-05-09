@@ -14,6 +14,8 @@ procedure Main is
 
    CEO : Corporation.CEO_Task;
 
+   Repair_Service : Corporation.Repair_Service_Task_Ptr := new Corporation.Repair_Service_Task;
+
    Workers : Corporation.WorkerArray_Ptr := new Corporation.WorkerArray;
 
    Work_Stations : Corporation.Work_Station_Types_Ptr := new Corporation.Work_Station_Types;
@@ -52,12 +54,13 @@ begin
    end if;
 
    CEO.Start(Corporation.JobQueue_Task_Access(Queue));
+   Repair_Service.Start(Work_Stations);
    declare
       C : Natural := 1;
    begin
       for T in Work_Stations'Range loop
          for W in Work_Stations(T)'Range loop
-            Work_Stations(T)(W) := new Corporation.Work_Station(C, T, Jobs.NewOperation(T));
+            Work_Stations(T)(W) := new Corporation.Work_Station_Task(C, T, Jobs.NewOperation(T));
             C := C + 1;
          end loop;
       end loop;
@@ -70,7 +73,7 @@ begin
       R.Reset(G);
       for W in Workers'Range loop
          Workers(W) := new Corporation.WorkerT(Natural(W), R.Random(G) < My_Constants.PatientWorkerBirthRate);
-         Workers(W).Start(Queue, Work_Stations, Storage);
+         Workers(W).Start(Queue, Work_Stations, Storage, Repair_Service);
       end loop;
    end;
 

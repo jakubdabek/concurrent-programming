@@ -4,10 +4,20 @@ package body My_Constants is
    begin
       return Rand.Random(Generator) > PatientWorkerBirthRate;
    end;
+
+   function Get_Work_Station_Break_Event (Generator : Rand.Generator) return Boolean is
+   begin
+      return Rand.Random(Generator) < WorkStationBreakChance;
+   end;
    
    function Get_Worker_Sleep_Time (Generator : Rand.Generator) return Duration is
    begin
       return Duration(WorkerSleepTimeMin + (WorkerSleepTimeMax - WorkerSleepTimeMin) * Rand.Random(Generator));
+   end;
+   
+   function Get_Repair_Worker_Travel_Time (Generator : Rand.Generator) return Duration is
+   begin
+      return Duration(RepairWorkerTravelTimeMin + (RepairWorkerTravelTimeMax - RepairWorkerTravelTimeMin) * Rand.Random(Generator));
    end;
    
    function Get_CEO_Sleep_Time (Generator : Rand.Generator) return Duration is

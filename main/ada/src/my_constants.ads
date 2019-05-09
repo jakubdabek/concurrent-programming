@@ -9,15 +9,22 @@ package My_Constants is
    StorageCapacity : constant := 20;
    ClientCapacity : constant := 2;
    NumberOfWorkStations : constant := 1;
+   NumberOfRepairWorkers : constant := 2;
    
-   PatientWorkerBirthRate : constant := 0.9;
+   PatientWorkerBirthRate : constant := 0.6;
    function Get_Worker_Patience (Generator : Rand.Generator) return Boolean;
+   WorkStationBreakChance : constant := 0.5;
+   function Get_Work_Station_Break_Event (Generator : Rand.Generator) return Boolean;
    
    ImpatientWorkerAttentionSpan : constant := 0.2;
 
    WorkerSleepTimeMin : constant := 3.0;
    WorkerSleepTimeMax : constant := 8.0;
    function Get_Worker_Sleep_Time (Generator : Rand.Generator) return Duration;
+   
+   RepairWorkerTravelTimeMin : constant := 2.0;
+   RepairWorkerTravelTimeMax : constant := 4.0;
+   function Get_Repair_Worker_Travel_Time (Generator : Rand.Generator) return Duration;
    
    CEOSleepTimeMin : constant := 1.5;
    CEOSleepTimeMax : constant := 3.0;
